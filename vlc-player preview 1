@@ -1,0 +1,247 @@
+import { useState, useRef, useEffect } from 'react'
+import { Play, Pause, Volume2, Sun, Moon, SkipBack, SkipForward, RotateCcw, FastForward, Rewind } from 'lucide-react'
+import { Button } from "/components/ui/button"
+import { Slider } from "/components/ui/slider"
+import { Card, CardContent, CardHeader, CardTitle } from "/components/ui/card"
+
+export default function VLCPlayer() {
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [volume, setVolume] = useState(50)
+  const [playbackRate, setPlaybackRate] = useState(1)
+  const [isDarkMode, setIsDarkMode] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showControls, setShowControls] = useState(true)
+  const [abLoop, setAbLoop] = useState({ a: null as number | null, b: null as number | null })
+  
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const controlsTimeoutRef = useRef<NodeJS.Timeout>()
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Sample video source (replace with your own)
+  const videoSrc = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration)
+    }
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(video.currentTime)
+      
+      // Check for A-B loop
+      if (abLoop.b && video.currentTime >= abLoop.b) {
+        video.currentTime = abLoop.a || 0
+      }
+    }
+
+    video.addEventListener('loadedmetadata', handleLoadedMetadata)
+    video.addEventListener('timeupdate', handleTimeUpdate)
+
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      video.removeEventListener('timeupdate', handleTimeUpdate)
+    }
+  }, [abLoop])
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.volume = volume / 100
+      videoRef.current.playbackRate = playbackRate
+    }
+  }, [volume, playbackRate])
+
+  const togglePlay = () => {
+    const video = videoRef.current
+    if (!video) return
+
+    if (isPlaying) {
+      video.pause()
+    } else {
+      video.play()
+    }
+    setIsPlaying(!isPlaying)
+  }
+
+  const handleSeek = (value: number[]) => {
+    const video = videoRef.current
+    if (!video) return
+    
+    const newTime = value[0]
+    video.currentTime = newTime
+    setCurrentTime(newTime)
+  }
+
+  const handleVolumeChange = (value: number[]) => {
+    setVolume(value[0])
+  }
+
+  const handlePlaybackRateChange = (rate: number) => {
+    setPlaybackRate(rate)
+  }
+
+  const skip = (seconds: number) => {
+    const video = videoRef.current
+    if (!video) return
+    
+    video.currentTime += seconds
+  }
+
+  const setLoopPoint = (point: 'a' | 'b') => {
+    if (point === 'a') {
+      setAbLoop({ ...abLoop, a: currentTime })
+    } else {
+      setAbLoop({ ...abLoop, b: currentTime })
+    }
+  }
+
+  const clearLoop = () => {
+    setAbLoop({ a: null, b: null })
+  }
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return
+    
+    if (!isFullscreen) {
+      containerRef.current.requestFullscreen()
+    } else {
+      document.exitFullscreen()
+    }
+    setIsFullscreen(!isFullscreen)
+  }
+
+  const handleMouseMove = () => {
+    setShowControls(true)
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current)
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false)
+    }, 3000)
+  }
+
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60)
+    const seconds = Math.floor(time % 60)
+    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`
+  }
+
+  return (
+    <div 
+      ref={containerRef}
+      className={`relative w-full h-screen flex flex-col ${isDarkMode ? 'bg-black text-white' : 'bg-white text-black'}`}
+      onMouseMove={handleMouseMove}
+    >
+      {/* Video Element */}
+      <video
+        ref={videoRef}
+        src={videoSrc}
+        className="w-full h-full object-contain"
+        onClick={togglePlay}
+      />
+
+      {/* Controls Overlay */}
+      {showControls && (
+        <div className={`absolute inset-0 flex flex-col justify-between p-4 ${isDarkMode ? 'bg-black/70' : 'bg-white/70'}`}>
+          {/* Top Controls */}
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-xl">VLC Clone</CardTitle>
+            <div className="flex space-x-2">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setIsDarkMode(!isDarkMode)}
+              >
+                {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={toggleFullscreen}
+              >
+                <span className="text-sm">{isFullscreen ? 'Exit' : 'Full'}</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Center Controls */}
+          <div className="flex justify-center items-center space-x-4">
+            <Button variant="ghost" size="icon" onClick={() => skip(-10)}>
+              <Rewind className="h-6 w-6" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setLoopPoint('a')}>
+              <span className="text-sm">A</span>
+            </Button>
+            <Button variant="ghost" size="icon" onClick={togglePlay}>
+              {isPlaying ? <Pause className="h-8 w-8" /> : <Play className="h-8 w-8" />}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setLoopPoint('b')}>
+              <span className="text-sm">B</span>
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => skip(10)}>
+              <FastForward className="h-6 w-6" />
+            </Button>
+          </div>
+
+          {/* Bottom Controls */}
+          <Card className="p-4">
+            <CardContent className="p-0 space-y-4">
+              {/* Progress Bar */}
+              <div className="flex items-center space-x-2">
+                <span className="text-sm w-12">{formatTime(currentTime)}</span>
+                <Slider
+                  value={[currentTime]}
+                  max={duration}
+                  step={0.1}
+                  onValueChange={handleSeek}
+                  className="flex-1"
+                />
+                <span className="text-sm w-12">{formatTime(duration)}</span>
+              </div>
+
+              {/* Secondary Controls */}
+              <div className="flex justify-between items-center">
+                <div className="flex items-center space-x-2 w-32">
+                  <Volume2 className="h-4 w-4" />
+                  <Slider
+                    value={[volume]}
+                    max={100}
+                    step={1}
+                    onValueChange={handleVolumeChange}
+                  />
+                </div>
+
+                <div className="flex space-x-2">
+                  {[0.5, 1, 1.5, 2].map((rate) => (
+                    <Button
+                      key={rate}
+                      variant={playbackRate === rate ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handlePlaybackRateChange(rate)}
+                    >
+                      {rate}x
+                    </Button>
+                  ))}
+                </div>
+
+                <div className="flex space-x-2">
+                  <Button 
+                    variant={abLoop.a !== null ? 'default' : 'outline'} 
+                    size="sm" 
+                    onClick={() => abLoop.a !== null ? clearLoop() : setLoopPoint('a')}
+                  >
+                    A-B Loop
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  )
+}
